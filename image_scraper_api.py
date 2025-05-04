@@ -2,9 +2,9 @@ from flask import Flask, request, jsonify
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
+from bs4 import BeautifulSoup
 import os
 import time
-import re
 import json
 
 app = Flask(__name__)
@@ -27,19 +27,31 @@ def scrape_ebay_images(item_number):
         driver = webdriver.Chrome(service=service, options=options)
         driver.get(url)
         time.sleep(3)
-
         html = driver.page_source
         driver.quit()
 
-        html = html.replace("\\u002F", "/")
-        match = re.search(r'"mediaList"\s*:\s*(\[\{.*?\}\])', html, re.DOTALL)
+        soup = BeautifulSoup(html, 'html.parser')
+        scripts = soup.find_all('script')
 
-        if not match:
-            return []
-
-        raw_json = match.group(1)
-
-        media_list = json.loads(raw_json)
+        media_list = []
+        for script in scripts:
+            if script.string and 'mediaList' in script.string:
+                text = script.string
+                start = text.find('mediaList') + len('mediaList') + 2
+                bracket_level = 1
+                i = start
+                while i < len(text) and bracket_level > 0:
+                    if text[i] == '[':
+                        bracket_level += 1
+                    elif text[i] == ']':
+                        bracket_level -= 1
+                    i += 1
+                raw_json = text[start:i]
+                try:
+                    media_list = json.loads(raw_json)
+                    break
+                except:
+                    continue
 
         image_urls = []
         for media in media_list:
