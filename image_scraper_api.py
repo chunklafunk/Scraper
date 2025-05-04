@@ -2,9 +2,6 @@ from flask import Flask, request, jsonify
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
 from bs4 import BeautifulSoup
 import os
 import time
@@ -64,7 +61,7 @@ def scrape_ebay_images(item_number):
                     media_list = json.loads(raw_json)
                     print(f"✅ Parsed {len(media_list)} image objects", flush=True)
                     print("🧠 Sample media keys:", list(media_list[0].keys()) if media_list else "None", flush=True)
-                    print("🧪 media['image'] =", json.dumps(media_list[0]['image'], indent=2), flush=True)
+                    print("🧪 media['image'] sample keys:", list(media_list[0]['image'].keys()) if media_list[0].get('image') else "None", flush=True)
                     break
                 except Exception as e:
                     print(f"⚠️ JSON parse failed: {e}", flush=True)
@@ -73,9 +70,9 @@ def scrape_ebay_images(item_number):
         image_urls = []
         for media in media_list:
             try:
-                url = media["image"]["url"]
+                url = media["image"]["zoomImg"]["URL"]
                 if url:
-                    image_urls.append(url.replace("s-l64", "s-l500"))
+                    image_urls.append(url)
             except KeyError:
                 continue
 
