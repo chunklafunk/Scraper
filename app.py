@@ -42,13 +42,22 @@ def get_ebay_images():
         for idx, script in enumerate(scripts):
             if 'mediaList' in script.text:
                 print(f"✅ Found mediaList in script #{idx}", flush=True)
-                match = re.search(r'"mediaList":\s*(\[[^\]]+\])', script.text)
+                match = re.search(r'"mediaList"\s*:\s*(\[[^\]]+\])', script.text, re.DOTALL)
                 if match:
+                    raw_json = match.group(1)
                     try:
-                        mediaList = json.loads(match.group(1))
+                        mediaList = json.loads(raw_json)
                         break
                     except json.JSONDecodeError as e:
-                        print(f"⚠️ JSON parse failed: {e}", flush=True)
+                        print(f"⚠️ JSON parse failed: {e}\n🔎 Raw snippet: {raw_json[:200]}", flush=True)
+                        try:
+                            # Attempt fallback trimming
+                            trimmed = raw_json.split("]")[0] + "]"
+                            mediaList = json.loads(trimmed)
+                            print("✅ Fallback parse succeeded", flush=True)
+                            break
+                        except Exception as ex:
+                            print(f"❌ Fallback failed: {ex}", flush=True)
 
         if not mediaList:
             print("❌ No mediaList found", flush=True)
