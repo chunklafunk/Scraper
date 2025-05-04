@@ -1,6 +1,6 @@
 flask
 selenium
-
+beautifulsoup4
 
 
 
