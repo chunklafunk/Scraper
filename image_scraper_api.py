@@ -31,17 +31,19 @@ def scrape_ebay_images(item_number):
         html = driver.page_source
         driver.quit()
 
-        # Look for mediaList JSON block
-        match = re.search(r'"mediaList":(\[.*?\])', html)
+        # Clean up HTML and extract mediaList JSON safely
+        html = html.replace("\\u002F", "/")
+        match = re.search(r'"mediaList"\s*:\s*(\[[^\]]+\])', html)
         if not match:
             return []
 
-        media_list_json = json.loads(match.group(1))
+        raw_json = match.group(1)
+        media_list = json.loads(raw_json)
 
         image_urls = []
-        for media in media_list_json:
-            if "mediaUrl" in media:
-                url = media["mediaUrl"]
+        for media in media_list:
+            url = media.get("mediaUrl")
+            if url:
                 image_urls.append(url.replace("s-l64", "s-l500"))
 
         return image_urls
