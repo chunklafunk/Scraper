@@ -1,8 +1,11 @@
 from flask import Flask, request, jsonify
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from webdriver_manager.chrome import ChromeDriverManager
 from bs4 import BeautifulSoup
-import requests
 import re
 import json
+import time
 
 app = Flask(__name__)
 
@@ -13,13 +16,24 @@ def get_ebay_images():
         return jsonify({"error": "Missing item parameter"}), 400
 
     try:
-        url = f"https://www.ebay.com/itm/{item}"
         print(f"\n🌐 Opening eBay item: {item}", flush=True)
-        res = requests.get(url, timeout=15, headers={
-            "User-Agent": "Mozilla/5.0"
-        })
-        soup = BeautifulSoup(res.text, 'html.parser')
 
+        # Setup headless Chrome
+        options = Options()
+        options.add_argument("--headless")
+        options.add_argument("--no-sandbox")
+        options.add_argument("--disable-dev-shm-usage")
+        options.add_argument("--disable-gpu")
+        options.add_argument("--window-size=1920x1080")
+
+        driver = webdriver.Chrome(ChromeDriverManager().install(), options=options)
+        driver.get(f"https://www.ebay.com/itm/{item}")
+        time.sleep(3)  # Wait for JS to render
+
+        html = driver.page_source
+        driver.quit()
+
+        soup = BeautifulSoup(html, 'html.parser')
         scripts = soup.find_all('script')
         print(f"🔍 Found {len(scripts)} <script> blocks", flush=True)
 
@@ -45,7 +59,6 @@ def get_ebay_images():
         for media in mediaList:
             if 'image' in media and 'zoomImg' in media['image']:
                 url = media['image']['zoomImg']['URL']
-                # ✅ Convert .webp to .jpg for browser compatibility
                 if url.endswith('.webp'):
                     url = url.replace('.webp', '.jpg')
                 urls.append(url)
