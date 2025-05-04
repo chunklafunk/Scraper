@@ -5,7 +5,8 @@ from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
 from bs4 import BeautifulSoup
 import time
-import json
+import re
+import ast
 
 app = Flask(__name__)
 HEADLESS = True
@@ -20,44 +21,37 @@ def start_browser():
     options.add_argument("--window-size=1920,1080")
     return webdriver.Chrome(ChromeDriverManager().install(), options=options)
 
-def extract_balanced_json(text, key):
-    start = text.find(key)
-    if start == -1:
-        return None
-    start = text.find('[', start)
-    if start == -1:
-        return None
-    depth = 0
-    for i in range(start, len(text)):
-        if text[i] == '[':
-            depth += 1
-        elif text[i] == ']':
-            depth -= 1
-            if depth == 0:
-                return text[start:i+1]
-    return None
+def clean_js_array(js_string):
+    js_string = js_string.strip()
+    js_string = re.sub(r",\s*}", "}", js_string)
+    js_string = re.sub(r",\s*]", "]", js_string)
+    js_string = js_string.replace("false", "False").replace("true", "True").replace("null", "None")
+    return js_string
+
+def extract_media_list(page_source):
+    pattern = re.compile(r'"mediaList"\s*:\s*(\[[^\]]+\])', re.DOTALL)
+    match = pattern.search(page_source)
+    if not match:
+        return []
+    
+    raw_list = clean_js_array(match.group(1))
+    try:
+        return ast.literal_eval(raw_list)
+    except Exception as e:
+        print(f"⚠️ Failed to parse mediaList: {e}")
+        return []
 
 def extract_images(driver):
-    soup = BeautifulSoup(driver.page_source, "html.parser")
-    scripts = soup.find_all("script")
-    for idx, script in enumerate(scripts):
-        if "mediaList" in script.text:
-            raw_json = extract_balanced_json(script.text, "mediaList")
-            if raw_json:
-                try:
-                    media_list = json.loads(raw_json)
-                    urls = []
-                    for media in media_list:
-                        if "image" in media:
-                            img = media["image"]
-                            for key in ["zoomImg", "largeImg", "originalImg", "thumbnail"]:
-                                if key in img and "URL" in img[key]:
-                                    urls.append(img[key]["URL"].replace(".webp", ".jpg"))
-                                    break
-                    return urls
-                except Exception as e:
-                    print(f"⚠️ JSON parse error: {e}")
-    return []
+    media_list = extract_media_list(driver.page_source)
+    urls = []
+    for media in media_list:
+        if "image" in media:
+            img = media["image"]
+            for key in ["zoomImg", "largeImg", "originalImg", "thumbnail"]:
+                if key in img and "URL" in img[key]:
+                    urls.append(img[key]["URL"].replace(".webp", ".jpg"))
+                    break
+    return urls
 
 @app.route("/api/images", methods=["GET"])
 def get_images():
