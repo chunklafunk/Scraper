@@ -1,14 +1,13 @@
 from flask import Flask, request, jsonify
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.common.by import By
+from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
+from bs4 import BeautifulSoup
 import time
 import json
-from bs4 import BeautifulSoup
 
 app = Flask(__name__)
-
 HEADLESS = True
 
 def start_browser():
@@ -17,31 +16,47 @@ def start_browser():
         options.add_argument("--headless=new")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
-    options.add_argument("--window-size=1920,1080")
     options.add_argument("--disable-gpu")
+    options.add_argument("--window-size=1920,1080")
     return webdriver.Chrome(ChromeDriverManager().install(), options=options)
+
+def extract_balanced_json(text, key):
+    start = text.find(key)
+    if start == -1:
+        return None
+    start = text.find('[', start)
+    if start == -1:
+        return None
+    depth = 0
+    for i in range(start, len(text)):
+        if text[i] == '[':
+            depth += 1
+        elif text[i] == ']':
+            depth -= 1
+            if depth == 0:
+                return text[start:i+1]
+    return None
 
 def extract_images(driver):
     soup = BeautifulSoup(driver.page_source, "html.parser")
     scripts = soup.find_all("script")
     for idx, script in enumerate(scripts):
         if "mediaList" in script.text:
-            json_start = script.text.find("mediaList") + len("mediaList") + 2
-            json_raw = script.text[json_start:]
-            json_raw = json_raw.split("}],")[0] + "}]"
-            try:
-                media_list = json.loads(json_raw)
-                urls = []
-                for media in media_list:
-                    if "image" in media:
-                        img = media["image"]
-                        for key in ["zoomImg", "largeImg", "originalImg", "thumbnail"]:
-                            if key in img and "URL" in img[key]:
-                                urls.append(img[key]["URL"])
-                                break
-                return urls
-            except Exception as e:
-                print(f"⚠️ JSON parse error: {e}")
+            raw_json = extract_balanced_json(script.text, "mediaList")
+            if raw_json:
+                try:
+                    media_list = json.loads(raw_json)
+                    urls = []
+                    for media in media_list:
+                        if "image" in media:
+                            img = media["image"]
+                            for key in ["zoomImg", "largeImg", "originalImg", "thumbnail"]:
+                                if key in img and "URL" in img[key]:
+                                    urls.append(img[key]["URL"].replace(".webp", ".jpg"))
+                                    break
+                    return urls
+                except Exception as e:
+                    print(f"⚠️ JSON parse error: {e}")
     return []
 
 @app.route("/api/images", methods=["GET"])
@@ -57,7 +72,7 @@ def get_images():
         try:
             driver = start_browser()
             driver.get(item_url)
-            time.sleep(4)
+            time.sleep(3)
             images = extract_images(driver)
             driver.quit()
 
