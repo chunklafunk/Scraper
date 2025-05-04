@@ -2,7 +2,6 @@ from flask import Flask, request, jsonify
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
-from webdriver_manager.chrome import ChromeDriverManager
 from bs4 import BeautifulSoup
 import re
 import json
@@ -25,8 +24,9 @@ def get_ebay_images():
         options.add_argument("--disable-dev-shm-usage")
         options.add_argument("--disable-gpu")
         options.add_argument("--window-size=1920x1080")
+        options.binary_location = "/usr/bin/chromium"
 
-        service = Service(ChromeDriverManager().install())
+        service = Service("/usr/bin/chromedriver")
         driver = webdriver.Chrome(service=service, options=options)
         driver.get(f"https://www.ebay.com/itm/{item}")
         time.sleep(3)
@@ -53,8 +53,6 @@ def get_ebay_images():
         if not mediaList:
             print("❌ No mediaList found", flush=True)
             return jsonify({"image_urls": [], "item": item})
-
-        print(f"✅ Parsed {len(mediaList)} image objects", flush=True)
 
         urls = []
         for media in mediaList:
