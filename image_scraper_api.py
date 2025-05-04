@@ -31,7 +31,7 @@ def scrape_ebay_images(item_number):
         driver = webdriver.Chrome(service=service, options=options)
         driver.get(url)
 
-        time.sleep(5)  # wait longer to let all scripts load
+        time.sleep(5)
         driver.save_screenshot(f"screenshot_{item_number}.png")
         html = driver.page_source
         driver.quit()
@@ -45,16 +45,22 @@ def scrape_ebay_images(item_number):
             if script.string and 'mediaList' in script.string:
                 print(f"✅ Found mediaList in script #{i}", flush=True)
                 text = script.string
-                start = text.find('mediaList') + len('mediaList') + 2
-                bracket_level = 1
-                i = start
-                while i < len(text) and bracket_level > 0:
-                    if text[i] == '[':
-                        bracket_level += 1
-                    elif text[i] == ']':
-                        bracket_level -= 1
-                    i += 1
-                raw_json = text[start:i]
+                start = text.find('mediaList') + len('mediaList') + 1
+                start_bracket = text.find('[', start)
+                end_bracket = text.find(']', start_bracket)
+
+                # expand until the full closing ] is found
+                bracket_count = 1
+                end = start_bracket + 1
+                while end < len(text) and bracket_count > 0:
+                    if text[end] == '[':
+                        bracket_count += 1
+                    elif text[end] == ']':
+                        bracket_count -= 1
+                    end += 1
+
+                raw_json = text[start_bracket:end]
+
                 try:
                     media_list = json.loads(raw_json)
                     print(f"✅ Parsed {len(media_list)} image objects", flush=True)
