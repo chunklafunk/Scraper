@@ -49,7 +49,6 @@ def scrape_ebay_images(item_number):
                 start_bracket = text.find('[', start)
                 end_bracket = text.find(']', start_bracket)
 
-                # expand until the full closing ] is found
                 bracket_count = 1
                 end = start_bracket + 1
                 while end < len(text) and bracket_count > 0:
@@ -64,15 +63,21 @@ def scrape_ebay_images(item_number):
                 try:
                     media_list = json.loads(raw_json)
                     print(f"✅ Parsed {len(media_list)} image objects", flush=True)
-                    print("🧠 Sample media object:", json.dumps(media_list[0], indent=2) if media_list else "None", flush=True)
+                    print("🧠 Sample media keys:", list(media_list[0].keys()) if media_list else "None", flush=True)
                     break
                 except Exception as e:
                     print(f"⚠️ JSON parse failed: {e}", flush=True)
                     continue
 
         image_urls = []
+        fallback_keys = ['mediaUrl', 'url', 'src', 'imageUrl', 'srcUrl']
+
         for media in media_list:
-            url = media.get("mediaUrl")
+            url = None
+            for key in fallback_keys:
+                if key in media:
+                    url = media[key]
+                    break
             if url:
                 image_urls.append(url.replace("s-l64", "s-l500"))
 
