@@ -3,11 +3,30 @@ from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
 from bs4 import BeautifulSoup
-import re
 import json
 import time
 
 app = Flask(__name__)
+
+# 🔧 Extracts a complete [ ... ] JSON array after a given key
+def extract_balanced_json(script_text, key):
+    start_idx = script_text.find(key)
+    if start_idx == -1:
+        return None
+
+    array_start = script_text.find('[', start_idx)
+    if array_start == -1:
+        return None
+
+    bracket_count = 0
+    for i in range(array_start, len(script_text)):
+        if script_text[i] == '[':
+            bracket_count += 1
+        elif script_text[i] == ']':
+            bracket_count -= 1
+            if bracket_count == 0:
+                return script_text[array_start:i+1]
+    return None
 
 @app.route('/api/images')
 def get_ebay_images():
@@ -42,22 +61,14 @@ def get_ebay_images():
         for idx, script in enumerate(scripts):
             if 'mediaList' in script.text:
                 print(f"✅ Found mediaList in script #{idx}", flush=True)
-                match = re.search(r'"mediaList"\s*:\s*(\[[^\]]+\])', script.text, re.DOTALL)
-                if match:
-                    raw_json = match.group(1)
+                raw_json = extract_balanced_json(script.text, 'mediaList')
+                if raw_json:
                     try:
                         mediaList = json.loads(raw_json)
+                        print(f"✅ Parsed {len(mediaList)} image objects", flush=True)
                         break
                     except json.JSONDecodeError as e:
-                        print(f"⚠️ JSON parse failed: {e}\n🔎 Raw snippet: {raw_json[:200]}", flush=True)
-                        try:
-                            # Attempt fallback trimming
-                            trimmed = raw_json.split("]")[0] + "]"
-                            mediaList = json.loads(trimmed)
-                            print("✅ Fallback parse succeeded", flush=True)
-                            break
-                        except Exception as ex:
-                            print(f"❌ Fallback failed: {ex}", flush=True)
+                        print(f"❌ JSON parse failed: {e}", flush=True)
 
         if not mediaList:
             print("❌ No mediaList found", flush=True)
