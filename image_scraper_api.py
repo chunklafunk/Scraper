@@ -1,6 +1,7 @@
 from flask import Flask, request, jsonify
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
 from bs4 import BeautifulSoup
 import re
@@ -18,7 +19,6 @@ def get_ebay_images():
     try:
         print(f"\n🌐 Opening eBay item: {item}", flush=True)
 
-        # Setup headless Chrome
         options = Options()
         options.add_argument("--headless")
         options.add_argument("--no-sandbox")
@@ -26,9 +26,10 @@ def get_ebay_images():
         options.add_argument("--disable-gpu")
         options.add_argument("--window-size=1920x1080")
 
-        driver = webdriver.Chrome(executable_path=ChromeDriverManager().install(), options=options)
+        service = Service(ChromeDriverManager().install())
+        driver = webdriver.Chrome(service=service, options=options)
         driver.get(f"https://www.ebay.com/itm/{item}")
-        time.sleep(3)  # wait for page JavaScript to render
+        time.sleep(3)
 
         html = driver.page_source
         driver.quit()
