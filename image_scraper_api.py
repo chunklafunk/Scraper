@@ -26,9 +26,9 @@ def get_ebay_images():
         options.add_argument("--disable-gpu")
         options.add_argument("--window-size=1920x1080")
 
-        driver = webdriver.Chrome(ChromeDriverManager().install(), options=options)
+        driver = webdriver.Chrome(executable_path=ChromeDriverManager().install(), options=options)
         driver.get(f"https://www.ebay.com/itm/{item}")
-        time.sleep(3)  # Wait for JS to render
+        time.sleep(3)  # wait for page JavaScript to render
 
         html = driver.page_source
         driver.quit()
