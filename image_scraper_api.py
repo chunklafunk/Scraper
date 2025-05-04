@@ -1,12 +1,11 @@
 from flask import Flask, request, jsonify
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.service import Service
-import time
 import os
-import json
+import time
 import re
+import json
 
 app = Flask(__name__)
 
@@ -24,26 +23,26 @@ def scrape_ebay_images(item_number):
         service = Service(executable_path='/usr/bin/chromedriver')
         driver = webdriver.Chrome(service=service, options=options)
         driver.get(url)
-        time.sleep(2)
+        time.sleep(3)
 
         html = driver.page_source
         driver.quit()
 
-        match = re.search(r'itemImageMap\\":({.*?})\\,"', html)
+        # Look for mediaList JSON block
+        match = re.search(r'"mediaList":(\[.*?\])', html)
         if not match:
             return []
 
-        image_data_raw = match.group(1)
-        image_data_json = json.loads(image_data_raw.replace('\\\\', '\\'))
+        media_list_json = json.loads(match.group(1))
 
         image_urls = []
-        for key, value in image_data_json.items():
-            if "media" in value:
-                for media in value["media"]:
-                    if "url" in media:
-                        image_urls.append(media["url"].replace("s-l64", "s-l500"))
+        for media in media_list_json:
+            if "mediaUrl" in media:
+                url = media["mediaUrl"]
+                image_urls.append(url.replace("s-l64", "s-l500"))
 
         return image_urls
+
     except Exception as e:
         return [f"Error: {str(e)}"]
 
