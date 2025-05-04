@@ -64,6 +64,7 @@ def scrape_ebay_images(item_number):
                 try:
                     media_list = json.loads(raw_json)
                     print(f"✅ Parsed {len(media_list)} image objects", flush=True)
+                    print("🧠 Sample media object:", json.dumps(media_list[0], indent=2) if media_list else "None", flush=True)
                     break
                 except Exception as e:
                     print(f"⚠️ JSON parse failed: {e}", flush=True)
