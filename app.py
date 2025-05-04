@@ -2,18 +2,18 @@ from flask import Flask, request, jsonify
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
+from selenium.common.exceptions import WebDriverException
 from bs4 import BeautifulSoup
 import json
 import time
 
 app = Flask(__name__)
 
-# 🔧 Extracts a complete [ ... ] JSON array after a given key
+# Extracts a complete [ ... ] JSON array after a given key
 def extract_balanced_json(script_text, key):
     start_idx = script_text.find(key)
     if start_idx == -1:
         return None
-
     array_start = script_text.find('[', start_idx)
     if array_start == -1:
         return None
@@ -28,9 +28,10 @@ def extract_balanced_json(script_text, key):
                 return script_text[array_start:i+1]
     return None
 
-# 🧪 Loads eBay page with retry protection
-def get_page_source(url, options, retries=1):
+# Loads eBay page with retry logic and safe browser teardown
+def get_page_source(url, options, retries=2):
     for attempt in range(retries + 1):
+        driver = None
         try:
             print(f"🌐 Loading attempt {attempt + 1}: {url}", flush=True)
             service = Service("/usr/bin/chromedriver")
@@ -38,12 +39,18 @@ def get_page_source(url, options, retries=1):
             driver.get(url)
             time.sleep(3)
             html = driver.page_source
-            driver.quit()
             return html
+        except WebDriverException as e:
+            print(f"❌ WebDriver error on attempt {attempt + 1}: {e}", flush=True)
         except Exception as e:
-            print(f"❌ Scrape attempt {attempt + 1} failed: {e}", flush=True)
-            if attempt == retries:
-                raise
+            print(f"❌ General error on attempt {attempt + 1}: {e}", flush=True)
+        finally:
+            try:
+                if driver:
+                    driver.quit()
+            except:
+                pass
+    return None
 
 @app.route('/api/images')
 def get_ebay_images():
@@ -55,19 +62,26 @@ def get_ebay_images():
         print(f"\n🚀 /api/images?item={item}", flush=True)
 
         options = Options()
-        options.add_argument("--headless")
+        options.add_argument("--headless=new")
         options.add_argument("--no-sandbox")
         options.add_argument("--disable-dev-shm-usage")
         options.add_argument("--disable-gpu")
-        options.add_argument("--window-size=1920x1080")
         options.add_argument("--disable-background-networking")
         options.add_argument("--disable-software-rasterizer")
         options.add_argument("--disable-infobars")
-        options.add_argument("--no-first-run")
+        options.add_argument("--disable-extensions")
+        options.add_argument("--disable-sync")
+        options.add_argument("--metrics-recording-only")
+        options.add_argument("--disable-default-apps")
+        options.add_argument("--mute-audio")
+        options.add_argument("--window-size=1920x1080")
         options.add_argument("--no-default-browser-check")
+        options.add_argument("--no-first-run")
         options.binary_location = "/usr/bin/chromium"
 
         html = get_page_source(f"https://www.ebay.com/itm/{item}", options)
+        if not html:
+            return jsonify({"image_urls": [], "item": item})
 
         soup = BeautifulSoup(html, 'html.parser')
         scripts = soup.find_all('script')
@@ -102,7 +116,7 @@ def get_ebay_images():
         return jsonify({"image_urls": urls, "item": item})
 
     except Exception as e:
-        print(f"❌ Error: {e}", flush=True)
+        print(f"❌ Fatal error: {e}", flush=True)
         return jsonify({"error": f"Error: {e}"}), 500
 
 if __name__ == '__main__':
