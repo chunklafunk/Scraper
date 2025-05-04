@@ -1,109 +1,78 @@
 from flask import Flask, request, jsonify
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.chrome.service import Service
-from bs4 import BeautifulSoup
-import json
+from selenium.webdriver.common.by import By
+from webdriver_manager.chrome import ChromeDriverManager
 import time
+import json
+from bs4 import BeautifulSoup
 
 app = Flask(__name__)
 
-# 🔧 Extracts a complete [ ... ] JSON array after a given key
-def extract_balanced_json(script_text, key):
-    start_idx = script_text.find(key)
-    if start_idx == -1:
-        return None
+HEADLESS = True
 
-    array_start = script_text.find('[', start_idx)
-    if array_start == -1:
-        return None
+def start_browser():
+    options = Options()
+    if HEADLESS:
+        options.add_argument("--headless=new")
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("--window-size=1920,1080")
+    options.add_argument("--disable-gpu")
+    return webdriver.Chrome(ChromeDriverManager().install(), options=options)
 
-    bracket_count = 0
-    for i in range(array_start, len(script_text)):
-        if script_text[i] == '[':
-            bracket_count += 1
-        elif script_text[i] == ']':
-            bracket_count -= 1
-            if bracket_count == 0:
-                return script_text[array_start:i+1]
-    return None
+def extract_images(driver):
+    soup = BeautifulSoup(driver.page_source, "html.parser")
+    scripts = soup.find_all("script")
+    for idx, script in enumerate(scripts):
+        if "mediaList" in script.text:
+            json_start = script.text.find("mediaList") + len("mediaList") + 2
+            json_raw = script.text[json_start:]
+            json_raw = json_raw.split("}],")[0] + "}]"
+            try:
+                media_list = json.loads(json_raw)
+                urls = []
+                for media in media_list:
+                    if "image" in media:
+                        img = media["image"]
+                        for key in ["zoomImg", "largeImg", "originalImg", "thumbnail"]:
+                            if key in img and "URL" in img[key]:
+                                urls.append(img[key]["URL"])
+                                break
+                return urls
+            except Exception as e:
+                print(f"⚠️ JSON parse error: {e}")
+    return []
 
-# 🧪 Loads eBay page with retry protection
-def get_page_source(url, options, retries=1):
-    for attempt in range(retries + 1):
+@app.route("/api/images", methods=["GET"])
+def get_images():
+    item_id = request.args.get("item")
+    if not item_id:
+        return jsonify({"error": "Missing item ID"}), 400
+
+    item_url = f"https://www.ebay.com/itm/{item_id}"
+    print(f"\n🌐 Loading: {item_url}")
+
+    for attempt in range(2):
         try:
-            print(f"🌐 Loading attempt {attempt + 1}: {url}", flush=True)
-            service = Service("/usr/bin/chromedriver")
-            driver = webdriver.Chrome(service=service, options=options)
-            driver.get(url)
-            time.sleep(3)
-            html = driver.page_source
+            driver = start_browser()
+            driver.get(item_url)
+            time.sleep(4)
+            images = extract_images(driver)
             driver.quit()
-            return html
+
+            if images:
+                print(f"✅ Found {len(images)} images")
+                return jsonify({"image_urls": images, "item": item_id})
+            else:
+                print("⚠️ No images found")
         except Exception as e:
-            print(f"❌ Scrape attempt {attempt + 1} failed: {e}", flush=True)
-            if attempt == retries:
-                raise
+            print(f"❌ Scrape attempt {attempt + 1} failed: {e}")
+            if 'driver' in locals():
+                driver.quit()
+            time.sleep(2)
 
-@app.route('/api/images')
-def get_ebay_images():
-    item = request.args.get('item')
-    if not item:
-        return jsonify({"error": "Missing item parameter"}), 400
+    return jsonify({"image_urls": [], "item": item_id}), 200
 
-    try:
-        print(f"\n🚀 /api/images?item={item}", flush=True)
-
-        options = Options()
-        options.add_argument("--headless")
-        options.add_argument("--no-sandbox")
-        options.add_argument("--disable-dev-shm-usage")
-        options.add_argument("--disable-gpu")
-        options.add_argument("--window-size=1920x1080")
-        options.add_argument("--disable-background-networking")
-        options.add_argument("--disable-software-rasterizer")
-        options.add_argument("--disable-infobars")
-        options.add_argument("--no-first-run")
-        options.add_argument("--no-default-browser-check")
-        options.binary_location = "/usr/bin/chromium"
-
-        html = get_page_source(f"https://www.ebay.com/itm/{item}", options)
-
-        soup = BeautifulSoup(html, 'html.parser')
-        scripts = soup.find_all('script')
-        print(f"🔍 Found {len(scripts)} <script> blocks", flush=True)
-
-        mediaList = None
-        for idx, script in enumerate(scripts):
-            if 'mediaList' in script.text:
-                print(f"✅ Found mediaList in script #{idx}", flush=True)
-                raw_json = extract_balanced_json(script.text, 'mediaList')
-                if raw_json:
-                    try:
-                        mediaList = json.loads(raw_json)
-                        print(f"✅ Parsed {len(mediaList)} image objects", flush=True)
-                        break
-                    except json.JSONDecodeError as e:
-                        print(f"❌ JSON parse failed: {e}", flush=True)
-
-        if not mediaList:
-            print("❌ No mediaList found", flush=True)
-            return jsonify({"image_urls": [], "item": item})
-
-        urls = []
-        for media in mediaList:
-            if 'image' in media and 'zoomImg' in media['image']:
-                url = media['image']['zoomImg']['URL']
-                if url.endswith('.webp'):
-                    url = url.replace('.webp', '.jpg')
-                urls.append(url)
-
-        print(f"🖼️ Returning {len(urls)} image URLs", flush=True)
-        return jsonify({"image_urls": urls, "item": item})
-
-    except Exception as e:
-        print(f"❌ Error: {e}", flush=True)
-        return jsonify({"error": f"Error: {e}"}), 500
-
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=8080)
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=8080)
