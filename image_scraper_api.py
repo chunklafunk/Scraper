@@ -70,16 +70,13 @@ def scrape_ebay_images(item_number):
                     continue
 
         image_urls = []
-        fallback_keys = ['mediaUrl', 'url', 'src', 'imageUrl', 'srcUrl']
-
         for media in media_list:
-            url = None
-            for key in fallback_keys:
-                if key in media:
-                    url = media[key]
-                    break
-            if url:
-                image_urls.append(url.replace("s-l64", "s-l500"))
+            try:
+                url = media["image"]["url"]
+                if url:
+                    image_urls.append(url.replace("s-l64", "s-l500"))
+            except KeyError:
+                continue
 
         print(f"🖼️ Returning {len(image_urls)} image URLs", flush=True)
         return image_urls
