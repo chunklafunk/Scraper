@@ -2,6 +2,9 @@ from flask import Flask, request, jsonify
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 from bs4 import BeautifulSoup
 import os
 import time
@@ -26,7 +29,12 @@ def scrape_ebay_images(item_number):
         service = Service(executable_path='/usr/bin/chromedriver')
         driver = webdriver.Chrome(service=service, options=options)
         driver.get(url)
-        time.sleep(3)
+
+        # Wait for at least one image block to be visible
+        WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.XPATH, "//script[contains(text(),'mediaList')]"))
+        )
+
         html = driver.page_source
         driver.quit()
 
