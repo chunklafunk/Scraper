@@ -1,26 +1,23 @@
 FROM python:3.10-slim
 
-# Install Chromium and dependencies
+# Install system dependencies for Chromium + Selenium
 RUN apt-get update && \
-    apt-get install -y wget gnupg unzip curl chromium chromium-driver && \
-    apt-get clean
+    apt-get install -y curl unzip gnupg chromium chromium-driver && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# Environment variables
+# Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
-# Working directory
 WORKDIR /app
 
-# Install Python dependencies
+# Install Python requirements
 COPY requirements.txt .
 RUN pip install --upgrade pip && pip install -r requirements.txt
 
-# Copy app files
+# Copy all code
 COPY . .
 
-# Expose port
 EXPOSE 8000
 
-# Run the app
 CMD ["python", "image_scraper_api.py"]
