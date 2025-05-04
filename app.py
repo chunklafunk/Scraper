@@ -28,6 +28,23 @@ def extract_balanced_json(script_text, key):
                 return script_text[array_start:i+1]
     return None
 
+# 🧪 Loads eBay page with retry protection
+def get_page_source(url, options, retries=1):
+    for attempt in range(retries + 1):
+        try:
+            print(f"🌐 Loading attempt {attempt + 1}: {url}", flush=True)
+            service = Service("/usr/bin/chromedriver")
+            driver = webdriver.Chrome(service=service, options=options)
+            driver.get(url)
+            time.sleep(3)
+            html = driver.page_source
+            driver.quit()
+            return html
+        except Exception as e:
+            print(f"❌ Scrape attempt {attempt + 1} failed: {e}", flush=True)
+            if attempt == retries:
+                raise
+
 @app.route('/api/images')
 def get_ebay_images():
     item = request.args.get('item')
@@ -35,7 +52,7 @@ def get_ebay_images():
         return jsonify({"error": "Missing item parameter"}), 400
 
     try:
-        print(f"\n🌐 Opening eBay item: {item}", flush=True)
+        print(f"\n🚀 /api/images?item={item}", flush=True)
 
         options = Options()
         options.add_argument("--headless")
@@ -43,15 +60,14 @@ def get_ebay_images():
         options.add_argument("--disable-dev-shm-usage")
         options.add_argument("--disable-gpu")
         options.add_argument("--window-size=1920x1080")
+        options.add_argument("--disable-background-networking")
+        options.add_argument("--disable-software-rasterizer")
+        options.add_argument("--disable-infobars")
+        options.add_argument("--no-first-run")
+        options.add_argument("--no-default-browser-check")
         options.binary_location = "/usr/bin/chromium"
 
-        service = Service("/usr/bin/chromedriver")
-        driver = webdriver.Chrome(service=service, options=options)
-        driver.get(f"https://www.ebay.com/itm/{item}")
-        time.sleep(3)
-
-        html = driver.page_source
-        driver.quit()
+        html = get_page_source(f"https://www.ebay.com/itm/{item}", options)
 
         soup = BeautifulSoup(html, 'html.parser')
         scripts = soup.find_all('script')
