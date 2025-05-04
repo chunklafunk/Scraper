@@ -26,24 +26,24 @@ def scrape_ebay_images(item_number):
     options.binary_location = '/usr/bin/chromium'
 
     try:
+        print(f"🌐 Opening eBay item: {item_number}", flush=True)
         service = Service(executable_path='/usr/bin/chromedriver')
         driver = webdriver.Chrome(service=service, options=options)
         driver.get(url)
 
-        # Wait for at least one image block to be visible
-        WebDriverWait(driver, 10).until(
-            EC.presence_of_element_located((By.XPATH, "//script[contains(text(),'mediaList')]"))
-        )
-
+        time.sleep(5)  # wait longer to let all scripts load
+        driver.save_screenshot(f"screenshot_{item_number}.png")
         html = driver.page_source
         driver.quit()
 
         soup = BeautifulSoup(html, 'html.parser')
         scripts = soup.find_all('script')
+        print(f"🔍 Found {len(scripts)} <script> blocks", flush=True)
 
         media_list = []
-        for script in scripts:
+        for i, script in enumerate(scripts):
             if script.string and 'mediaList' in script.string:
+                print(f"✅ Found mediaList in script #{i}", flush=True)
                 text = script.string
                 start = text.find('mediaList') + len('mediaList') + 2
                 bracket_level = 1
@@ -57,8 +57,10 @@ def scrape_ebay_images(item_number):
                 raw_json = text[start:i]
                 try:
                     media_list = json.loads(raw_json)
+                    print(f"✅ Parsed {len(media_list)} image objects", flush=True)
                     break
-                except:
+                except Exception as e:
+                    print(f"⚠️ JSON parse failed: {e}", flush=True)
                     continue
 
         image_urls = []
@@ -67,9 +69,11 @@ def scrape_ebay_images(item_number):
             if url:
                 image_urls.append(url.replace("s-l64", "s-l500"))
 
+        print(f"🖼️ Returning {len(image_urls)} image URLs", flush=True)
         return image_urls
 
     except Exception as e:
+        print(f"❌ Scraper exception: {e}", flush=True)
         return [f"Error: {str(e)}"]
 
 @app.route('/api/images', methods=['GET'])
@@ -78,7 +82,7 @@ def get_images():
     if not item_number:
         return jsonify({'error': 'Missing item parameter'}), 400
 
-    print(f"Scraping images for item {item_number}", flush=True)
+    print(f"\n🚀 /api/images?item={item_number}", flush=True)
     image_urls = scrape_ebay_images(item_number)
 
     if image_urls and image_urls[0].startswith("Error"):
